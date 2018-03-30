@@ -9,6 +9,7 @@ var homespun    = require('homespun-discovery')
   , sensorTypes = homespun.utilities.sensortypes
   , underscore  = require('underscore')
   , util        = require('util')
+  , ringApi     = require('ring-api')
 
 
 var Accessory
@@ -52,33 +53,58 @@ Ring.prototype._didFinishLaunching = function () {
   var self = this
 
   var refresh = function () {
+
+    // var ring2 = ringApi( { email: self.config.username,
+    //                       password:  self.config.password,
+    //                       userAgent: self.options.userAgent,
+    //                       poll: false
+    // });
+
+    // self.doorbot2 = ring2;
+
+
     var ring = RingAPI({ email     : self.config.username
                        , password  : self.config.password
                        , retries   : self.options.retries
                        , userAgent : self.options.userAgent
                        })
 
+
+
+    // const logActivity = activity => console.log( 'there is a activity', activity );
+
+    // self.doorbot2.events.on('activity', logActivity);
+
     self.doorbot = ring
+
+
     self._refresh1(function (err) {
+
+      if(self.options.verboseP) {
+          self.log('_refresh1 running');
+        }
       if (err) {
         self.log.error('refresh1', underscore.extend({ username: self.config.username }, err))
         return setTimeout(refresh, 30 * 1000)
       }
 
       self._refresh2(function (err) {
+        if(self.options.verboseP) {
+          self.log('_refresh2 running');
+        }
         if (err) {
           self.log.error('refresh2', underscore.extend({ username: self.config.username }, err))
           return setTimeout(refresh, 30 * 1000)
         }
-
         return setTimeout(refresh, self.options.ttl * 1000)
       })
-    })
+    });
   }
 
   refresh()
-
-  self.log('didFinishLaunching')
+  if(self.options.verboseP) {
+      self.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! didFinishLaunching !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+  }
 }
 
 Ring.prototype._addAccessory = function (device) {
@@ -87,7 +113,9 @@ Ring.prototype._addAccessory = function (device) {
   var accessory = new Accessory(device.name, device.uuid)
 
   accessory.on('identify', function (paired, callback) {
-    self.log(accessory.displayName, ': identify request')
+    if(self.options.verboseP) {
+      self.log(accessory.displayName, ': identify request')
+    }
     callback()
   })
 
@@ -95,24 +123,33 @@ Ring.prototype._addAccessory = function (device) {
 
   if (!self.discoveries[accessory.UUID]) {
     self.api.registerPlatformAccessories('homebridge-platform-ring-video-doorbell', 'ring-video-doorbell', [ accessory ])
-    self.log('addAccessory', underscore.pick(device, [ 'uuid', 'name', 'manufacturer', 'model', 'serialNumber' ]))
+    if(self.options.verboseP) {
+      self.log('addAccessory', underscore.pick(device, [ 'uuid', 'name', 'manufacturer', 'model', 'serialNumber' ]))
+    }
   }
 }
 
 Ring.prototype.configurationRequestHandler = function (context, request, callback) {/* jshint unused: false */
-  this.log('configuration request', { context: context, request: request })
+  //
+    if(this.options.verboseP) {
+        this.log('configuration request', { context: context, request: request })
+    }
 }
 
 Ring.prototype.configureAccessory = function (accessory) {
   var self = this
 
   accessory.on('identify', function (paired, callback) {
-    self.log(accessory.displayName, ': identify request')
+    if(self.options.verboseP) {
+      self.log(accessory.displayName, ': identify request')
+    }
     callback()
   })
 
   self.discoveries[accessory.UUID] = accessory
-  self.log('configureAccessory', underscore.pick(accessory, [ 'UUID', 'displayName' ]))
+  if(self.options.verboseP) {
+    self.log('configureAccessory', underscore.pick(accessory, [ 'UUID', 'displayName' ]))
+  }
 }
 
 /*
@@ -157,6 +194,27 @@ Ring.prototype.configureAccessory = function (accessory) {
 Ring.prototype._refresh1 = function (callback) {
   var self = this
 
+  // self.log('~~~~~~~~~ ATTEMPTING NEW DOORBOT ~~~~~~~~~~~');
+
+  // const getDevices = async() => {
+  //   const rdevices = await self.doorbot2.devices()
+  //   console.log(rdevices);
+  // }
+
+  // getDevices();
+
+  // self.doorbot2.devices().then(function (err, result) {
+  //   if(err) {
+  //     self.log.error(err);
+  //     return callback(err);
+  //   }
+
+  //   if(result) {
+  //     self.log(result);
+  //   }
+
+  // });
+
   self.doorbot.devices(function (err, result) {
     var serialNumbers = []
 
@@ -168,7 +226,9 @@ Ring.prototype._refresh1 = function (callback) {
         , device = devices[deviceId]
 
       if (!device) {
-        console.log('type: ' + ((devices === self.doorbots) ? 'ringing' : 'floodlight') + ' ... ' + JSON.stringify(service, null, 2))
+        if(self.options.verboseP) {
+          self.log('type: ' + ((devices === self.doorbots) ? 'ringing' : 'floodlight') + ' ... ' + JSON.stringify(service, null, 2))
+        }
         capabilities = underscore.pick(sensorTypes,
                                        [ 'battery_level', 'battery_low', 'motion_detected', 'reachability' ])
         underscore.extend(capabilities, underscore.pick(sensorTypes,
@@ -205,7 +265,9 @@ Ring.prototype._refresh1 = function (callback) {
 
         if (accessory) {
           self.api.registerPlatformAccessories('homebridge-platform-ring-video-doorbell', 'ring-video-doorbell', [ accessory ])
-          self.log('removeAccessory', underscore.pick(device, [ 'uuid', 'name', 'manufacturer', 'model', 'serialNumber' ]))
+          if(self.options.verboseP) {
+            self.log('removeAccessory', underscore.pick(device, [ 'uuid', 'name', 'manufacturer', 'model', 'serialNumber' ]))
+          }
         }
 
         delete devices[deviceId]
@@ -219,7 +281,13 @@ Ring.prototype._refresh1 = function (callback) {
     check_devices(self.doorbots)
 
     if (!result.stickup_cams) result.stickup_cams = []
-    result.stickup_cams.forEach(function (service) { handle_device(StickupCam, self.stickup_cams, service) })
+    result.stickup_cams.forEach(function (service) {
+      if(self.options.verboseP) {
+        self.log('Stick Up Cam', service);
+      }
+      handle_device(StickupCam, self.stickup_cams, service)
+
+    })
     check_devices(self.stickup_cams)
 
     callback()
@@ -274,6 +342,16 @@ Ring.prototype._refresh2 = function (callback) {
 
       if (event.state !== 'ringing') return
 
+      if(self.options.verboseP) {
+        if(event.kind === 'ding') {
+          self.log('🎵 RING RING!!!');
+
+        } else if(event.kind === 'motion') {
+          self.log('🎵 Motion Detected!');
+
+        }
+      }
+
       device = self.doorbots[event.doorbot_id] || self.stickup_cams[event.doorbot_id]
       if (!device) return self.log.error('dings/active: no device', event)
 
@@ -311,26 +389,36 @@ var StickupCam = function (platform, deviceId, service) {
   var floodlight
 
   PushSensor.call(this, platform, deviceId, service)
-  
+
   floodlight = self.getAccessoryService(Service.Lightbulb)
   if (!floodlight) return self.log.warn('StickupCam', { err: 'could not find Service.Lightbulb' })
 
-  console.log('!!! setting callback for on/off')
+  if(platform.options.verboseP) {
+    platform.log('!!! 💡📹 floodlight / stickup cam found - setting floodlight callback for on/off')
+  }
+
   floodlight.getCharacteristic(Characteristic.On).on('set', function (value, callback) {
-    console.log('!!! set value to ' + JSON.stringify(value))
-    platform.doorbot[value ? 'lightOn' : 'lightOff']({ id: deviceId },
-                                                     function (err, response, result) {/* jshint unused: false */
-      console.log('!!! result from doorbot.' + (value ? 'lightOn' : 'lightOff') + ': errP=' + (!!err))
-      if (err) {
-        self.log.error('setValue', underscore.extend({ deviceId: deviceId }, err))
-      } else {
-        self._update.bind(self)({ floodlight: value })
+    if(floodlight.getCharacteristic(Characteristic.On).value !== value) {
+      if(platform.options.verboseP) {
+        platform.log('Attempting to set floodlight bulb value to ' + JSON.stringify(value))
+        platform.log('OLD Value: ' + floodlight.getCharacteristic(Characteristic.On).value + ' New Value: ' + value);
       }
-       
-      callback()
-    })
-    console.log('!!! setting value to ' + JSON.stringify(value))
+      platform.doorbot[value ? 'lightOn' : 'lightOff']({ id: deviceId }, function (err, response, result) {/* jshint unused: false */
+        if (err) {
+          if(platform.options.verboseP) {
+            platform.log.error('💡floodlight setValue', underscore.extend({ deviceId: deviceId }, err))
+          }
+        } else {
+          if(platform.options.verboseP) {
+            platform.log('💡💡 floodlight setting value to ' + JSON.stringify(value))
+          }
+        }
+
+        self._update.bind(self)({ floodlight: value })
+        callback()
+      })
+     }
   })
-  console.log('!!! callback for on/off is now set')
+  //console.log('!!! callback for on/off is now set')
 }
 util.inherits(StickupCam, PushSensor)
